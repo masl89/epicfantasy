@@ -67,48 +67,6 @@ const ActiveQuests = ({ profile, quests: initialQuests, onProfileUpdate }: Activ
     }
   }
 
-  const simulateProgress = useCallback(async (quest: PlayerQuest) => {
-    try {
-      if (!quest || quest.progress >= 100 || !quest.is_working) return
-
-      const progressRate = quest.quest?.difficulty 
-        ? DIFFICULTY_RATES[quest.quest.difficulty]
-        : DIFFICULTY_RATES.easy
-
-      const newProgress = Math.min(100, quest.progress + progressRate)
-      
-      const { error: progressError } = await supabase
-        .from('player_quests')
-        .update({ progress: newProgress })
-        .eq('id', quest.id)
-
-      if (progressError) throw progressError
-
-      // Update local state
-      setQuests(currentQuests => 
-        currentQuests.map(q => 
-          q.id === quest.id 
-            ? { ...q, progress: newProgress }
-            : q
-        )
-      )
-
-      // Add activity log for significant progress milestones
-      if (Math.floor(quest.progress / 25) < Math.floor(newProgress / 25)) {
-        await supabase
-          .from('activity_log')
-          .insert({
-            profile_id: profile.id,
-            activity_type: 'quest_progress',
-            description: `Made progress on quest: ${quest.quest?.title} (${newProgress}%)`
-          })
-      }
-    } catch (error) {
-      console.error('Progress error:', error)
-      setError(error instanceof Error ? error.message : 'An error occurred')
-    }
-  }, [quests, profile.id, supabase])
-
   // Subscribe to real-time updates
   useEffect(() => {
     const channel = supabase
@@ -151,27 +109,43 @@ const ActiveQuests = ({ profile, quests: initialQuests, onProfileUpdate }: Activ
     }
   }, [supabase, profile.id])
 
-  // Refresh quest data periodically as backup
+  // Modify the progress update effect
   useEffect(() => {
+    if (!profile.id) return;
+
     const interval = setInterval(async () => {
-      const { data: updatedQuests } = await supabase
-        .from('player_quests')
-        .select(`
-          *,
-          quest:quests(
-            *,
-            item_reward:items(*)
-          )
-        `)
-        .in('id', quests.map(q => q.id))
+      // Fetch current quest states
+      const { data: currentQuests } = await supabase
+        .from('current_player_quests')
+        .select()
+        .eq('profile_id', profile.id)
+        .not('status', 'eq', 'completed');
 
-      if (updatedQuests) {
-        setQuests(updatedQuests)
+      if (currentQuests) {
+        // Transform the data to match the expected format
+        const transformedQuests = currentQuests.map(q => ({
+          ...q,
+          progress: q.current_progress,
+          quest: {
+            title: q.quest_title,
+            description: q.quest_description,
+            difficulty: q.quest_difficulty,
+            level_requirement: q.level_requirement,
+            experience_reward: q.experience_reward,
+            gold_reward: q.gold_reward,
+            item_reward_id: q.item_reward_id,
+            item_reward: q.item_reward_name ? {
+              name: q.item_reward_name,
+              description: q.item_reward_description
+            } : null
+          }
+        }));
+        setQuests(transformedQuests);
       }
-    }, PROGRESS_INTERVAL)
+    }, PROGRESS_INTERVAL);
 
-    return () => clearInterval(interval)
-  }, [quests, supabase])
+    return () => clearInterval(interval);
+  }, [profile.id]);
 
   const toggleQuestWork = async (questId: string) => {
     const quest = quests.find(q => q.id === questId)
@@ -198,14 +172,19 @@ const ActiveQuests = ({ profile, quests: initialQuests, onProfileUpdate }: Activ
         )
       )
 
-      // Log the action
-      await supabase
-        .from('activity_log')
-        .insert({
-          profile_id: profile.id,
-          activity_type: newWorkingState ? 'start_quest_work' : 'stop_quest_work',
-          description: `${newWorkingState ? 'Started' : 'Stopped'} working on quest: ${quest.quest?.title}`
-        })
+      try {
+        // Log the action
+        await supabase
+          .from('activity_log')
+          .insert({
+            profile_id: profile.id,
+            activity_type: newWorkingState ? 'start_quest_work' : 'stop_quest_work',
+            description: `${newWorkingState ? 'Started' : 'Stopped'} working on quest: ${quest.quest?.title}`
+          })
+      } catch (logError) {
+        // Don't fail the whole operation if logging fails
+        console.warn('Failed to log activity:', logError)
+      }
     } catch (error) {
       console.error('Toggle work error:', error)
       setError(error instanceof Error ? error.message : 'An error occurred')
