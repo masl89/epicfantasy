@@ -3,9 +3,16 @@
 import { useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Profile } from '@/types/database'
+import { calculateLevel } from '@/lib/experience'
 
 interface CharacterStatsProps {
   profile: Profile
+}
+
+interface LevelInfo {
+  level: number;
+  currentLevelExp: number;
+  expForNextLevel: number;
 }
 
 const classDescriptions = {
@@ -36,6 +43,9 @@ const CharacterStats = ({ profile }: CharacterStatsProps) => {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Calculate level info
+  const levelInfo: LevelInfo = calculateLevel(profile.experience)
+
   const handleUpdateUsername = async () => {
     setError(null)
     setLoading(true)
@@ -55,10 +65,6 @@ const CharacterStats = ({ profile }: CharacterStatsProps) => {
       setLoading(false)
     }
   }
-
-  // Calculate experience needed for next level
-  const expForNextLevel = profile.level * 100
-  const expProgress = profile.experience % 100
 
   return (
     <div className="space-y-6">
@@ -121,8 +127,8 @@ const CharacterStats = ({ profile }: CharacterStatsProps) => {
             label="Health" 
           />
           <StatBar 
-            current={expProgress} 
-            max={100} 
+            current={levelInfo.currentLevelExp} 
+            max={levelInfo.expForNextLevel} 
             label="Experience" 
           />
         </div>
@@ -163,7 +169,7 @@ const CharacterStats = ({ profile }: CharacterStatsProps) => {
           </div>
           <div>
             <p className="text-sm text-gray-600 dark:text-gray-400">Next Level</p>
-            <p className="text-lg font-bold">{expForNextLevel} exp</p>
+            <p className="text-lg font-bold">{levelInfo.expForNextLevel} exp</p>
           </div>
         </div>
       </div>

@@ -58,6 +58,15 @@ const GameLayout = async ({ children }: { children: React.ReactNode }) => {
                 Quests
               </Link>
             </li>
+            <li>
+              <Link
+                href="/game/dungeons"
+                className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                tabIndex={0}
+              >
+                Dungeons
+              </Link>
+            </li>
           </ul>
           <div className="absolute bottom-0 left-0 w-64 p-4 border-t dark:border-gray-700">
             <LogoutButton />
