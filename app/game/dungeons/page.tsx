@@ -16,8 +16,7 @@ const DungeonsPage = async () => {
   if (!profile || profileError) {
     return <div>Error loading profile</div>
   }
-
-  // Then get the active battle using the profile id
+  // Get any active battle for this profile, including the associated monster details
   const { data: battle } = await supabase
     .from('battles')
     .select(`
